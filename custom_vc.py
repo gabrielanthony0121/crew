@@ -63,7 +63,7 @@ class CreateVCModal(discord.ui.Modal, title="🎙️ Create Your Voice Channel")
         # Permissões da call
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(
-                view_channel=False,
+                view_channel=True,
                 connect=False
             ),
             member: discord.PermissionOverwrite(
@@ -183,6 +183,7 @@ class CustomVC(commands.Cog):
                 "Click the button below to set up your personal room.\n"
                 "You'll have full control — rename it, manage members, and more.\n\n"
                 f"🔑 Required role: {role.mention}"
+                "🗑️ To delete your room: `c!deletevc`"
             ),
             color=discord.Color.from_rgb(114, 137, 218)
         )
