@@ -126,3 +126,5 @@ if __name__ == "__main__":
         print("[FATAL ERROR] Token not found! Check your .env file")
     else:
         asyncio.run(main())
+
+        await bot.load_extension("custom_vc")
