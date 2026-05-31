@@ -119,6 +119,7 @@ async def info(ctx: commands.Context):
 async def main():
     async with bot:
         await bot.load_extension("moderacao")
+        await bot.load_extension("custom_vc")
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
@@ -126,5 +127,3 @@ if __name__ == "__main__":
         print("[FATAL ERROR] Token not found! Check your .env file")
     else:
         asyncio.run(main())
-
-        await bot.load_extension("custom_vc")
