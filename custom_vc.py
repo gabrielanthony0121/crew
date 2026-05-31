@@ -182,7 +182,7 @@ class CustomVC(commands.Cog):
                 "**Create your own permanent voice channel!**\n\n"
                 "Click the button below to set up your personal room.\n"
                 "You'll have full control — rename it, manage members, and more.\n\n"
-                f"🔑 Required role: {role.mention}"
+                f"🔑 Required role: {role.mention}\n\n"
                 "🗑️ To delete your room: `c!deletevc`"
             ),
             color=discord.Color.from_rgb(114, 137, 218)
