@@ -80,18 +80,6 @@ class CreateVCModal(discord.ui.Modal, title="🎙️ Create Your Voice Channel")
             )
         }
 
-        # Cargo com permissão pode entrar
-        if role_id:
-            allowed_role = guild.get_role(int(role_id))
-            if allowed_role:
-                overwrites[allowed_role] = discord.PermissionOverwrite(
-                    view_channel=True,
-                    connect=True,
-                    speak=True,
-                    stream=True,
-                    use_voice_activation=True
-                )
-
         try:
             channel = await guild.create_voice_channel(
                 name=self.channel_name.value,
