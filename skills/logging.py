@@ -337,40 +337,26 @@ class Logging(commands.Cog):
     async def on_member_join(self, member: discord.Member):
         embed = discord.Embed(
             title="📥 Member Joined",
-            description=f"{member.mention} (`{member.id}`)",
-            color=discord.Color.green(),
+            color=discord.Color.from_rgb(67, 181, 129),
+            timestamp=discord.utils.utcnow()
         )
-        embed.add_field(
-            name="Account Created",
-            value=format_dt(member.created_at),
-            inline=True,
-        )
-        embed.add_field(
-            name="Member Count",
-            value=str(member.guild.member_count),
-            inline=True,
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        embed.add_field(name="Account Created", value=format_dt(member.created_at), inline=True)
+        embed.add_field(name="Member Count", value=str(member.guild.member_count), inline=True)
         await self._send_log(embed)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         embed = discord.Embed(
             title="📤 Member Left",
-            description=f"{member} (`{member.id}`)",
-            color=discord.Color.red(),
+            color=discord.Color.from_rgb(240, 71, 71),
+            timestamp=discord.utils.utcnow()
         )
-        embed.add_field(
-            name="Account Created",
-            value=format_dt(member.created_at),
-            inline=True,
-        )
-        embed.add_field(
-            name="Joined Server",
-            value=format_dt(member.joined_at),
-            inline=True,
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.add_field(name="User", value=f"{member} (`{member.id}`)", inline=True)
+        embed.add_field(name="Account Created", value=format_dt(member.created_at), inline=True)
+        embed.add_field(name="Joined Server", value=format_dt(member.joined_at), inline=True)
         await self._send_log(embed)
 
     @commands.Cog.listener()
@@ -379,29 +365,26 @@ class Logging(commands.Cog):
         if payload.guild_id is None:
             return
 
-        # If we have a cached version and it was a bot message, skip
         if payload.cached_message and payload.cached_message.author.bot:
             return
 
         channel = self.bot.get_channel(payload.channel_id)
-        channel_str = channel.mention if channel and hasattr(channel, "mention") else f"<#{payload.channel_id}>"
+        channel_mention = channel.mention if channel and hasattr(channel, "mention") else f"<#{payload.channel_id}>"
 
         embed = discord.Embed(
             title="🗑️ Message Deleted",
-            color=discord.Color.from_rgb(255, 100, 100),
+            color=discord.Color.from_rgb(255, 82, 82),
+            timestamp=discord.utils.utcnow()
         )
-        embed.add_field(name="Channel", value=channel_str, inline=True)
 
         if payload.cached_message:
-            # We have full info because the message was still in cache
             msg = payload.cached_message
-            embed.add_field(
-                name="Author",
-                value=f"{msg.author} (`{msg.author.id}`)",
-                inline=True,
-            )
-            content = (msg.content or "").strip()
-            if content:
+            embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
+
+            embed.add_field(name="Channel", value=channel_mention, inline=True)
+
+            if msg.content and msg.content.strip():
+                content = msg.content.strip()
                 if len(content) > 1024:
                     content = content[:1021] + "..."
                 embed.add_field(name="Content", value=content, inline=False)
@@ -409,16 +392,27 @@ class Logging(commands.Cog):
                 embed.add_field(name="Content", value="*No text content*", inline=False)
 
             if msg.attachments:
-                att = ", ".join([a.filename for a in msg.attachments[:5]])
-                embed.add_field(name="Attachments", value=att, inline=False)
-        else:
-            # Uncached delete (old message, bot restart, or very high volume)
-            embed.add_field(name="Author", value="Unknown (message not cached)", inline=True)
+                names = [f"[{a.filename}]({a.url})" for a in msg.attachments[:5]]
+                embed.add_field(name="Attachments", value="\n".join(names), inline=False)
+
+                # Rich image/video preview (similar to Loritta style)
+                first = msg.attachments[0]
+                if first.content_type and first.content_type.startswith(("image/", "video/")):
+                    embed.set_image(url=first.url)
+
+            # Traceability IDs
+            embed.add_field(name="User ID", value=str(msg.author.id), inline=True)
             embed.add_field(name="Message ID", value=str(payload.message_id), inline=True)
+            embed.add_field(name="Channel ID", value=str(payload.channel_id), inline=True)
+        else:
+            embed.set_author(name="Unknown Author")
+            embed.add_field(name="Channel", value=channel_mention, inline=True)
+            embed.add_field(name="Message ID", value=str(payload.message_id), inline=True)
+            embed.add_field(name="Channel ID", value=str(payload.channel_id), inline=True)
             embed.add_field(
                 name="Note",
-                value="Full content/author not available (the message was sent before the bot saw it or cache was cleared).",
-                inline=False,
+                value="Full details unavailable — message was not in cache.",
+                inline=False
             )
 
         await self._send_log(embed)
@@ -429,48 +423,43 @@ class Logging(commands.Cog):
         if payload.guild_id is None:
             return
 
-        # Get before state if available
         before = payload.cached_message
-
         if before and before.author.bot:
             return
 
-        # Try to extract the new content from the raw data
         data = payload.data or {}
         after_content = data.get("content")
 
         if before:
             if before.content == after_content:
-                return  # no meaningful text change
+                return
             old = (before.content or "*empty*").strip()
             author = before.author
-            channel = before.channel
+            ch = before.channel
         else:
             old = "*unknown (not cached)*"
             author = None
-            channel = self.bot.get_channel(payload.channel_id)
+            ch = self.bot.get_channel(payload.channel_id)
 
         new = (after_content or "*empty*").strip() if after_content else "*unknown*"
-
         if old == new:
             return
 
         embed = discord.Embed(
             title="✏️ Message Edited",
             color=discord.Color.orange(),
+            timestamp=discord.utils.utcnow()
         )
 
         if author:
-            embed.add_field(
-                name="Author",
-                value=f"{author} (`{author.id}`)",
-                inline=True,
-            )
+            embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+            embed.add_field(name="Author", value=f"{author} (`{author.id}`)", inline=True)
         else:
+            embed.set_author(name="Unknown Author")
             embed.add_field(name="Author", value="Unknown (not cached)", inline=True)
 
-        channel_str = channel.mention if channel and hasattr(channel, "mention") else f"<#{payload.channel_id}>"
-        embed.add_field(name="Channel", value=channel_str, inline=True)
+        channel_mention = ch.mention if ch and hasattr(ch, "mention") else f"<#{payload.channel_id}>"
+        embed.add_field(name="Channel", value=channel_mention, inline=True)
 
         if len(old) > 512:
             old = old[:509] + "..."
@@ -480,20 +469,8 @@ class Logging(commands.Cog):
         embed.add_field(name="Before", value=old, inline=False)
         embed.add_field(name="After", value=new, inline=False)
 
-        # Try to include jump link if we have message id
-        if payload.message_id:
-            try:
-                guild = self.bot.get_guild(payload.guild_id)
-                ch = guild.get_channel(payload.channel_id) if guild else None
-                if ch:
-                    # We can't easily build jump_url without the message object, but we can note the ID
-                    embed.add_field(
-                        name="Message ID",
-                        value=str(payload.message_id),
-                        inline=False,
-                    )
-            except Exception:
-                pass
+        embed.add_field(name="Message ID", value=str(payload.message_id), inline=True)
+        embed.add_field(name="Channel ID", value=str(payload.channel_id), inline=True)
 
         await self._send_log(embed)
 
@@ -502,22 +479,25 @@ class Logging(commands.Cog):
         self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
     ):
         if before.channel == after.channel:
-            return  # ignore pure mute/deafen changes
+            return
+
+        embed = discord.Embed(timestamp=discord.utils.utcnow())
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
 
         if before.channel is None and after.channel is not None:
-            title = "🔊 Voice Channel Joined"
-            color = discord.Color.green()
-            desc = f"{member.mention} joined **{after.channel.name}**"
+            embed.title = "🔊 Voice Channel Joined"
+            embed.color = discord.Color.from_rgb(67, 181, 129)
+            embed.add_field(name="Channel", value=f"**{after.channel.name}**", inline=True)
         elif before.channel is not None and after.channel is None:
-            title = "🔇 Voice Channel Left"
-            color = discord.Color.red()
-            desc = f"{member.mention} left **{before.channel.name}**"
+            embed.title = "🔇 Voice Channel Left"
+            embed.color = discord.Color.from_rgb(240, 71, 71)
+            embed.add_field(name="Channel", value=f"**{before.channel.name}**", inline=True)
         else:
-            title = "🔄 Voice Channel Switched"
-            color = discord.Color.blurple()
-            desc = f"{member.mention} moved from **{before.channel.name}** to **{after.channel.name}**"
+            embed.title = "🔄 Voice Channel Switched"
+            embed.color = discord.Color.from_rgb(114, 137, 218)
+            embed.add_field(name="From", value=f"**{before.channel.name}**", inline=True)
+            embed.add_field(name="To", value=f"**{after.channel.name}**", inline=True)
 
-        embed = discord.Embed(title=title, description=desc, color=color)
         embed.add_field(name="User", value=f"{member} (`{member.id}`)", inline=True)
         await self._send_log(embed)
 

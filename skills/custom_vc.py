@@ -106,8 +106,10 @@ class CreateVCModal(discord.ui.Modal, title="🎙️ Create Your Voice Channel")
             # Log to server logs channel
             log_embed = discord.Embed(
                 title="🎙️ Custom Voice Channel Created",
-                color=discord.Color.green(),
+                color=discord.Color.from_rgb(67, 181, 129),
+                timestamp=discord.utils.utcnow()
             )
+            log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
             log_embed.add_field(name="Channel", value=f"**{channel.name}** (`{channel.id}`)", inline=True)
             log_embed.add_field(name="Owner", value=f"{member.mention} (`{member.id}`)", inline=True)
             log_embed.add_field(name="Category", value=category.name if category else "None", inline=True)
@@ -239,8 +241,10 @@ class CustomVC(commands.Cog):
                 # Log to server logs
                 log_embed = discord.Embed(
                     title="🗑️ Custom Voice Channel Deleted",
-                    color=discord.Color.red(),
+                    color=discord.Color.from_rgb(240, 71, 71),
+                    timestamp=discord.utils.utcnow()
                 )
+                log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
                 log_embed.add_field(name="Channel", value=f"**{channel_name}**", inline=True)
                 log_embed.add_field(name="Owner", value=f"{member.mention} (`{member.id}`)", inline=True)
                 log_embed.add_field(name="Deleted by", value="Owner (self)", inline=True)
@@ -292,8 +296,10 @@ class CustomVC(commands.Cog):
                 # Log to server logs
                 log_embed = discord.Embed(
                     title="🗑️ Custom Voice Channel Deleted",
-                    color=discord.Color.red(),
+                    color=discord.Color.from_rgb(240, 71, 71),
+                    timestamp=discord.utils.utcnow()
                 )
+                log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
                 log_embed.add_field(name="Channel", value=f"**{channel_name}**", inline=True)
                 log_embed.add_field(name="Owner", value=f"{member.mention} (`{member.id}`)", inline=True)
                 log_embed.add_field(name="Deleted by", value=f"Admin {ctx.author.mention}", inline=True)

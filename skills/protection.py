@@ -64,7 +64,9 @@ class Protection(commands.Cog):
             log_embed = discord.Embed(
                 title="🚫 Invite Link Blocked",
                 color=discord.Color.from_rgb(255, 59, 59),
+                timestamp=discord.utils.utcnow()
             )
+            log_embed.set_author(name=str(author), icon_url=author.display_avatar.url)
             log_embed.add_field(name="User", value=f"{author.mention} (`{author.id}`)", inline=True)
             log_embed.add_field(name="Channel", value=message.channel.mention, inline=True)
             log_embed.add_field(

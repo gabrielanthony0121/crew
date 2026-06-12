@@ -130,10 +130,12 @@ class Moderation(commands.Cog):
         print(f"[LOG] Mute | {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
 
         # Also send to configured log channel
-        log_embed = discord.Embed(title="🔇 Member Muted", color=discord.Color.from_rgb(255, 165, 0))
-        log_embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
-        log_embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
-        log_embed.add_field(name="📋 Reason", value=reason, inline=False)
+        log_embed = discord.Embed(title="🔇 Member Muted", color=discord.Color.from_rgb(255, 165, 0), timestamp=discord.utils.utcnow())
+        log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        log_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        log_embed.add_field(name="Reason", value=reason, inline=False)
+        log_embed.add_field(name="User ID", value=str(member.id), inline=True)
         if hasattr(self.bot, "send_log"):
             await self.bot.send_log(log_embed)
 
@@ -186,9 +188,11 @@ class Moderation(commands.Cog):
         print(f"[LOG] Unmute | {member} ({member.id}) | By: {ctx.author}")
 
         # Also send to configured log channel
-        log_embed = discord.Embed(title="🔊 Member Unmuted", color=discord.Color.green())
-        log_embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
-        log_embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
+        log_embed = discord.Embed(title="🔊 Member Unmuted", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+        log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        log_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        log_embed.add_field(name="User ID", value=str(member.id), inline=True)
         if hasattr(self.bot, "send_log"):
             await self.bot.send_log(log_embed)
 
@@ -270,10 +274,12 @@ class Moderation(commands.Cog):
         print(f"[LOG] Ban | {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
 
         # Log channel
-        log_embed = discord.Embed(title="🔨 Member Banned", color=discord.Color.red())
-        log_embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
-        log_embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
-        log_embed.add_field(name="📋 Reason", value=reason, inline=False)
+        log_embed = discord.Embed(title="🔨 Member Banned", color=discord.Color.red(), timestamp=discord.utils.utcnow())
+        log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        log_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        log_embed.add_field(name="Reason", value=reason, inline=False)
+        log_embed.add_field(name="User ID", value=str(member.id), inline=True)
         if hasattr(self.bot, "send_log"):
             await self.bot.send_log(log_embed)
 
@@ -346,10 +352,12 @@ class Moderation(commands.Cog):
         print(f"[LOG] Unban | {user} ({user.id}) | Reason: {reason} | By: {ctx.author}")
 
         # Log channel
-        log_embed = discord.Embed(title="🔓 Member Unbanned", color=discord.Color.green())
-        log_embed.add_field(name="👤 User", value=f"{user.mention} (`{user.id}`)", inline=True)
-        log_embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
-        log_embed.add_field(name="📋 Reason", value=reason, inline=False)
+        log_embed = discord.Embed(title="🔓 Member Unbanned", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+        log_embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+        log_embed.add_field(name="User", value=f"{user.mention} (`{user.id}`)", inline=True)
+        log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        log_embed.add_field(name="Reason", value=reason, inline=False)
+        log_embed.add_field(name="User ID", value=str(user.id), inline=True)
         if hasattr(self.bot, "send_log"):
             await self.bot.send_log(log_embed)
 
