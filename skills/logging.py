@@ -151,7 +151,49 @@ class Logging(commands.Cog):
         except Exception:
             pass
 
-        # Create the channel (simple, staff can adjust permissions afterwards)
+        # === Smart handling to avoid duplicate channels ===
+        # 1. If we already have a valid configured log channel that still exists, just inform
+        if self.log_channel_id:
+            existing_configured = guild.get_channel(self.log_channel_id)
+            if existing_configured and isinstance(existing_configured, discord.TextChannel):
+                embed = discord.Embed(
+                    title="📋 Log Channel Already Configured",
+                    description=f"Server logging is already pointing to {existing_configured.mention}.\nNo new channel was created.",
+                    color=discord.Color.blurple(),
+                )
+                await ctx.send(embed=embed, delete_after=10)
+                return
+
+        # 2. Look for any existing channel literally named "server-logs"
+        existing = discord.utils.get(guild.text_channels, name="server-logs")
+        if existing:
+            self.log_channel_id = existing.id
+            save_config({"log_channel_id": str(existing.id)})
+
+            embed = discord.Embed(
+                title="📋 Log Channel Found",
+                description=(
+                    f"Found existing **{existing.mention}**.\n"
+                    "Updated the bot config to use it for server logs.\n\n"
+                    "No duplicate channel was created."
+                ),
+                color=discord.Color.green(),
+            )
+            await ctx.send(embed=embed, delete_after=12)
+
+            # Send a confirmation/test inside the log channel
+            test = discord.Embed(
+                title="✅ Server Logs Active",
+                description="This channel is now configured to receive server activity logs.",
+                color=discord.Color.green(),
+            )
+            if hasattr(self.bot, "send_log"):
+                await self.bot.send_log(test)
+            else:
+                await existing.send(embed=test)
+            return
+
+        # 3. No existing one found → create a fresh one
         try:
             log_channel = await guild.create_text_channel(
                 "server-logs",
