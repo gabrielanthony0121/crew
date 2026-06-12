@@ -1,3 +1,6 @@
+import os
+from datetime import datetime
+
 import discord
 from discord.ext import commands
 
@@ -12,6 +15,7 @@ class General(commands.Cog):
         print(f"  ✅ Bot online as: {self.bot.user}")
         print(f"  🤖 ID: {self.bot.user.id}")
         print(f"  📡 Connected to {len(self.bot.guilds)} server(s)")
+        print(f"  🖥️  PID: {os.getpid()}   |   Started: {datetime.utcnow().isoformat()}Z")
         print("─" * 40)
 
         await self.bot.change_presence(
