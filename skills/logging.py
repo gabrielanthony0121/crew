@@ -374,67 +374,104 @@ class Logging(commands.Cog):
         await self._send_log(embed)
 
     @commands.Cog.listener()
-    async def on_message_delete(self, message: discord.Message):
-        if message.guild is None or message.author.bot:
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        """Log message deletions server-wide (works even for uncached/old messages)."""
+        if payload.guild_id is None:
             return
+
+        # If we have a cached version and it was a bot message, skip
+        if payload.cached_message and payload.cached_message.author.bot:
+            return
+
+        channel = self.bot.get_channel(payload.channel_id)
+        channel_str = channel.mention if channel and hasattr(channel, "mention") else f"<#{payload.channel_id}>"
 
         embed = discord.Embed(
             title="🗑️ Message Deleted",
             color=discord.Color.from_rgb(255, 100, 100),
         )
-        embed.add_field(
-            name="Author",
-            value=f"{message.author} (`{message.author.id}`)",
-            inline=True,
-        )
-        embed.add_field(
-            name="Channel",
-            value=message.channel.mention if hasattr(message.channel, "mention") else str(message.channel),
-            inline=True,
-        )
+        embed.add_field(name="Channel", value=channel_str, inline=True)
 
-        content = (message.content or "").strip()
-        if content:
-            if len(content) > 1024:
-                content = content[:1021] + "..."
-            embed.add_field(name="Content", value=content, inline=False)
+        if payload.cached_message:
+            # We have full info because the message was still in cache
+            msg = payload.cached_message
+            embed.add_field(
+                name="Author",
+                value=f"{msg.author} (`{msg.author.id}`)",
+                inline=True,
+            )
+            content = (msg.content or "").strip()
+            if content:
+                if len(content) > 1024:
+                    content = content[:1021] + "..."
+                embed.add_field(name="Content", value=content, inline=False)
+            else:
+                embed.add_field(name="Content", value="*No text content*", inline=False)
+
+            if msg.attachments:
+                att = ", ".join([a.filename for a in msg.attachments[:5]])
+                embed.add_field(name="Attachments", value=att, inline=False)
         else:
-            embed.add_field(name="Content", value="*No text content*", inline=False)
-
-        if message.attachments:
-            att = ", ".join([a.filename for a in message.attachments[:5]])
-            embed.add_field(name="Attachments", value=att, inline=False)
+            # Uncached delete (old message, bot restart, or very high volume)
+            embed.add_field(name="Author", value="Unknown (message not cached)", inline=True)
+            embed.add_field(name="Message ID", value=str(payload.message_id), inline=True)
+            embed.add_field(
+                name="Note",
+                value="Full content/author not available (the message was sent before the bot saw it or cache was cleared).",
+                inline=False,
+            )
 
         await self._send_log(embed)
 
-    # Note: We only listen to on_message_delete (cached messages).
-    # This gives us author + full content for recent messages.
-    # Very old/uncached deletes will simply not appear (acceptable for this bot).
-
     @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        if before.guild is None or before.author.bot:
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        """Log message edits server-wide."""
+        if payload.guild_id is None:
             return
-        if before.content == after.content:
-            return  # only embeds or other non-content changes
+
+        # Get before state if available
+        before = payload.cached_message
+
+        if before and before.author.bot:
+            return
+
+        # Try to extract the new content from the raw data
+        data = payload.data or {}
+        after_content = data.get("content")
+
+        if before:
+            if before.content == after_content:
+                return  # no meaningful text change
+            old = (before.content or "*empty*").strip()
+            author = before.author
+            channel = before.channel
+        else:
+            old = "*unknown (not cached)*"
+            author = None
+            channel = self.bot.get_channel(payload.channel_id)
+
+        new = (after_content or "*empty*").strip() if after_content else "*unknown*"
+
+        if old == new:
+            return
 
         embed = discord.Embed(
             title="✏️ Message Edited",
             color=discord.Color.orange(),
         )
-        embed.add_field(
-            name="Author",
-            value=f"{before.author} (`{before.author.id}`)",
-            inline=True,
-        )
-        embed.add_field(
-            name="Channel",
-            value=before.channel.mention if hasattr(before.channel, "mention") else str(before.channel),
-            inline=True,
-        )
 
-        old = (before.content or "*empty*").strip()
-        new = (after.content or "*empty*").strip()
+        if author:
+            embed.add_field(
+                name="Author",
+                value=f"{author} (`{author.id}`)",
+                inline=True,
+            )
+        else:
+            embed.add_field(name="Author", value="Unknown (not cached)", inline=True)
+
+        channel_str = channel.mention if channel and hasattr(channel, "mention") else f"<#{payload.channel_id}>"
+        embed.add_field(name="Channel", value=channel_str, inline=True)
+
         if len(old) > 512:
             old = old[:509] + "..."
         if len(new) > 512:
@@ -443,13 +480,20 @@ class Logging(commands.Cog):
         embed.add_field(name="Before", value=old, inline=False)
         embed.add_field(name="After", value=new, inline=False)
 
-        # Jump link
-        if after.id:
-            embed.add_field(
-                name="Jump",
-                value=f"[Go to message]({after.jump_url})",
-                inline=False,
-            )
+        # Try to include jump link if we have message id
+        if payload.message_id:
+            try:
+                guild = self.bot.get_guild(payload.guild_id)
+                ch = guild.get_channel(payload.channel_id) if guild else None
+                if ch:
+                    # We can't easily build jump_url without the message object, but we can note the ID
+                    embed.add_field(
+                        name="Message ID",
+                        value=str(payload.message_id),
+                        inline=False,
+                    )
+            except Exception:
+                pass
 
         await self._send_log(embed)
 
