@@ -383,35 +383,53 @@ class Logging(commands.Cog):
 
             embed.add_field(name="Channel", value=channel_mention, inline=True)
 
+            # Content section (mimics "Mensagem:" area)
             if msg.content and msg.content.strip():
                 content = msg.content.strip()
-                if len(content) > 1024:
-                    content = content[:1021] + "..."
+                if len(content) > 1000:
+                    content = content[:997] + "..."
                 embed.add_field(name="Content", value=content, inline=False)
             else:
                 embed.add_field(name="Content", value="*No text content*", inline=False)
 
             if msg.attachments:
-                names = [f"[{a.filename}]({a.url})" for a in msg.attachments[:5]]
+                names = []
+                for a in msg.attachments[:5]:
+                    names.append(f"[{a.filename}]({a.url})")
                 embed.add_field(name="Attachments", value="\n".join(names), inline=False)
 
-                # Rich image/video preview (similar to Loritta style)
+                # Prominent media preview (key to match Loritta look)
                 first = msg.attachments[0]
                 if first.content_type and first.content_type.startswith(("image/", "video/")):
                     embed.set_image(url=first.url)
 
-            # Traceability IDs
-            embed.add_field(name="User ID", value=str(msg.author.id), inline=True)
-            embed.add_field(name="Message ID", value=str(payload.message_id), inline=True)
-            embed.add_field(name="Channel ID", value=str(payload.channel_id), inline=True)
+            # Sent time + IDs block (like Loritta's traceability section)
+            embed.add_field(name="Sent", value=format_dt(msg.created_at), inline=True)
+
+            ids_value = (
+                "```yaml\n"
+                f"User ID:    {msg.author.id}\n"
+                f"Message ID: {payload.message_id}\n"
+                f"Channel ID: {payload.channel_id}\n"
+                f"Server ID:  {payload.guild_id}\n"
+                "```"
+            )
+            embed.add_field(name="IDs", value=ids_value, inline=False)
+
         else:
             embed.set_author(name="Unknown Author")
             embed.add_field(name="Channel", value=channel_mention, inline=True)
-            embed.add_field(name="Message ID", value=str(payload.message_id), inline=True)
-            embed.add_field(name="Channel ID", value=str(payload.channel_id), inline=True)
+            ids_value = (
+                "```yaml\n"
+                f"Message ID: {payload.message_id}\n"
+                f"Channel ID: {payload.channel_id}\n"
+                f"Server ID:  {payload.guild_id}\n"
+                "```"
+            )
+            embed.add_field(name="IDs", value=ids_value, inline=False)
             embed.add_field(
                 name="Note",
-                value="Full details unavailable — message was not in cache.",
+                value="Full details unavailable — message was not in cache (old message or bot restarted).",
                 inline=False
             )
 
