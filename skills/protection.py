@@ -19,7 +19,6 @@ class Protection(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
-            await self.bot.process_commands(message)
             return
 
         author = message.author
@@ -84,7 +83,9 @@ class Protection(commands.Cog):
 
             return
 
-        await self.bot.process_commands(message)
+        # Do not call process_commands here.
+        # The commands.Bot framework handles command processing for all messages automatically.
+        # Calling it here would cause every command to execute twice.
 
 
 async def setup(bot: commands.Bot):
