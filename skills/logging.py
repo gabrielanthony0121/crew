@@ -1,0 +1,437 @@
+import json
+from datetime import datetime
+
+import discord
+from discord.ext import commands
+
+from core.config import DATA_DIR
+
+
+CONFIG_FILE = DATA_DIR / "logging_config.json"
+
+
+def load_config() -> dict:
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"log_channel_id": None}
+
+
+def save_config(data: dict) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def format_dt(dt: datetime | None) -> str:
+    if not dt:
+        return "Unknown"
+    return f"<t:{int(dt.timestamp())}:F>"
+
+
+class Logging(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        cfg = load_config()
+        self.log_channel_id: int | None = (
+            int(cfg["log_channel_id"]) if cfg.get("log_channel_id") else None
+        )
+        # Attach helper so other cogs can call: await bot.send_log(embed)
+        self.bot.send_log = self._send_log  # type: ignore[attr-defined]
+        print("[LOG] Logging cog initialized. Log channel configured:", bool(self.log_channel_id))
+
+    async def _send_log(self, embed: discord.Embed) -> None:
+        if not self.log_channel_id:
+            return
+
+        channel = self.bot.get_channel(self.log_channel_id)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(self.log_channel_id)
+            except Exception:
+                return
+
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        try:
+            if embed.timestamp is None:
+                embed.timestamp = discord.utils.utcnow()
+
+            guild = channel.guild
+            embed.set_footer(
+                text=f"Server Logs • {guild.name}" if guild else "Server Logs",
+                icon_url=guild.icon.url if guild and guild.icon else None,
+            )
+            await channel.send(embed=embed)
+        except discord.Forbidden:
+            print("[ERROR] No permission to send to log channel.")
+        except Exception as e:
+            print(f"[ERROR] Failed to send log: {e}")
+
+    async def _get_log_channel(self) -> discord.TextChannel | None:
+        if not self.log_channel_id:
+            return None
+        ch = self.bot.get_channel(self.log_channel_id)
+        if isinstance(ch, discord.TextChannel):
+            return ch
+        return None
+
+    # ==================== COMMANDS ====================
+
+    def _is_admin(self, author: discord.Member) -> bool:
+        return author.guild_permissions.administrator
+
+    @commands.command(name="setlogs")
+    async def set_logs(self, ctx: commands.Context, channel: discord.TextChannel = None):
+        if not self._is_admin(ctx.author):
+            embed = discord.Embed(
+                description="❌ You don't have permission to use this command (Administrator required).",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        if channel is None:
+            channel = ctx.channel
+
+        if not isinstance(channel, discord.TextChannel):
+            embed = discord.Embed(
+                description="❌ Please provide a valid text channel.",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        self.log_channel_id = channel.id
+        save_config({"log_channel_id": str(channel.id)})
+
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
+
+        embed = discord.Embed(
+            title="📋 Log Channel Set",
+            description=f"Server logs will now be sent to {channel.mention}.",
+            color=discord.Color.blurple(),
+        )
+        embed.set_footer(text=f"Configured by {ctx.author.display_name}")
+        await ctx.send(embed=embed, delete_after=10)
+
+        # Send a test message to the log channel
+        test = discord.Embed(
+            title="✅ Logging Enabled",
+            description="This channel is now receiving server activity logs.",
+            color=discord.Color.green(),
+        )
+        await self._send_log(test)
+
+    @commands.command(name="createlogs")
+    async def create_logs(self, ctx: commands.Context):
+        if not self._is_admin(ctx.author):
+            embed = discord.Embed(
+                description="❌ You don't have permission to use this command (Administrator required).",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        guild = ctx.guild
+        if guild is None:
+            embed = discord.Embed(
+                description="❌ This command can only be used in a server.",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
+
+        # Create the channel (simple, staff can adjust permissions afterwards)
+        try:
+            log_channel = await guild.create_text_channel(
+                "server-logs",
+                topic="Server activity logs • Joins, leaves, message changes, moderation, custom VCs and more. Do not delete this channel.",
+                reason="Log channel created via c!createlogs command",
+            )
+        except discord.Forbidden:
+            embed = discord.Embed(
+                description="❌ I don't have permission to create channels. Make sure the bot has 'Manage Channels'.",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+        except Exception as e:
+            embed = discord.Embed(
+                description=f"❌ Failed to create log channel: {e}",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        self.log_channel_id = log_channel.id
+        save_config({"log_channel_id": str(log_channel.id)})
+
+        success = discord.Embed(
+            title="📋 Log Channel Created",
+            description=(
+                f"Created **{log_channel.mention}** and enabled server logging.\n\n"
+                "All important events will be recorded here:\n"
+                "• Member joins and leaves\n"
+                "• Deleted and edited messages\n"
+                "• Mutes, bans, and other moderation\n"
+                "• Custom voice channel creation/deletion\n"
+                "• Voice activity (joins/leaves)\n\n"
+                "You can restrict who can read this channel in Discord settings."
+            ),
+            color=discord.Color.green(),
+        )
+        await ctx.send(embed=success, delete_after=12)
+
+        # Welcome message inside the new log channel
+        welcome = discord.Embed(
+            title="✅ Server Logs Active",
+            description="This channel will automatically record important server events.",
+            color=discord.Color.green(),
+        )
+        await log_channel.send(embed=welcome)
+
+    @commands.command(name="logs")
+    async def show_logs(self, ctx: commands.Context):
+        if not self._is_admin(ctx.author):
+            embed = discord.Embed(
+                description="❌ You don't have permission to use this command (Administrator required).",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        if self.log_channel_id:
+            ch = ctx.guild.get_channel(self.log_channel_id)
+            if ch:
+                desc = f"Current log channel: {ch.mention} (`{ch.id}`)"
+            else:
+                desc = f"Configured channel ID `{self.log_channel_id}` (channel not found in this server)."
+        else:
+            desc = "No log channel configured.\nUse `c!setlogs #channel` or `c!createlogs`."
+
+        embed = discord.Embed(
+            title="📋 Server Logs Status",
+            description=desc,
+            color=discord.Color.blurple(),
+        )
+        await ctx.send(embed=embed, delete_after=15)
+
+    # ==================== EVENT LISTENERS ====================
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        embed = discord.Embed(
+            title="📥 Member Joined",
+            description=f"{member.mention} (`{member.id}`)",
+            color=discord.Color.green(),
+        )
+        embed.add_field(
+            name="Account Created",
+            value=format_dt(member.created_at),
+            inline=True,
+        )
+        embed.add_field(
+            name="Member Count",
+            value=str(member.guild.member_count),
+            inline=True,
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await self._send_log(embed)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        embed = discord.Embed(
+            title="📤 Member Left",
+            description=f"{member} (`{member.id}`)",
+            color=discord.Color.red(),
+        )
+        embed.add_field(
+            name="Account Created",
+            value=format_dt(member.created_at),
+            inline=True,
+        )
+        embed.add_field(
+            name="Joined Server",
+            value=format_dt(member.joined_at),
+            inline=True,
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await self._send_log(embed)
+
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message):
+        if message.guild is None or message.author.bot:
+            return
+
+        embed = discord.Embed(
+            title="🗑️ Message Deleted",
+            color=discord.Color.from_rgb(255, 100, 100),
+        )
+        embed.add_field(
+            name="Author",
+            value=f"{message.author} (`{message.author.id}`)",
+            inline=True,
+        )
+        embed.add_field(
+            name="Channel",
+            value=message.channel.mention if hasattr(message.channel, "mention") else str(message.channel),
+            inline=True,
+        )
+
+        content = (message.content or "").strip()
+        if content:
+            if len(content) > 1024:
+                content = content[:1021] + "..."
+            embed.add_field(name="Content", value=content, inline=False)
+        else:
+            embed.add_field(name="Content", value="*No text content*", inline=False)
+
+        if message.attachments:
+            att = ", ".join([a.filename for a in message.attachments[:5]])
+            embed.add_field(name="Attachments", value=att, inline=False)
+
+        await self._send_log(embed)
+
+    # Note: We only listen to on_message_delete (cached messages).
+    # This gives us author + full content for recent messages.
+    # Very old/uncached deletes will simply not appear (acceptable for this bot).
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        if before.guild is None or before.author.bot:
+            return
+        if before.content == after.content:
+            return  # only embeds or other non-content changes
+
+        embed = discord.Embed(
+            title="✏️ Message Edited",
+            color=discord.Color.orange(),
+        )
+        embed.add_field(
+            name="Author",
+            value=f"{before.author} (`{before.author.id}`)",
+            inline=True,
+        )
+        embed.add_field(
+            name="Channel",
+            value=before.channel.mention if hasattr(before.channel, "mention") else str(before.channel),
+            inline=True,
+        )
+
+        old = (before.content or "*empty*").strip()
+        new = (after.content or "*empty*").strip()
+        if len(old) > 512:
+            old = old[:509] + "..."
+        if len(new) > 512:
+            new = new[:509] + "..."
+
+        embed.add_field(name="Before", value=old, inline=False)
+        embed.add_field(name="After", value=new, inline=False)
+
+        # Jump link
+        if after.id:
+            embed.add_field(
+                name="Jump",
+                value=f"[Go to message]({after.jump_url})",
+                inline=False,
+            )
+
+        await self._send_log(embed)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(
+        self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+    ):
+        if before.channel == after.channel:
+            return  # ignore pure mute/deafen changes
+
+        if before.channel is None and after.channel is not None:
+            title = "🔊 Voice Channel Joined"
+            color = discord.Color.green()
+            desc = f"{member.mention} joined **{after.channel.name}**"
+        elif before.channel is not None and after.channel is None:
+            title = "🔇 Voice Channel Left"
+            color = discord.Color.red()
+            desc = f"{member.mention} left **{before.channel.name}**"
+        else:
+            title = "🔄 Voice Channel Switched"
+            color = discord.Color.blurple()
+            desc = f"{member.mention} moved from **{before.channel.name}** to **{after.channel.name}**"
+
+        embed = discord.Embed(title=title, description=desc, color=color)
+        embed.add_field(name="User", value=f"{member} (`{member.id}`)", inline=True)
+        await self._send_log(embed)
+
+    @commands.Cog.listener()
+    async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry):
+        # Skip actions performed by the bot itself (we log those in the commands)
+        if entry.user and entry.user.id == self.bot.user.id:
+            return
+
+        if entry.action == discord.AuditLogAction.ban:
+            target = entry.target
+            moderator = entry.user or "Unknown"
+            reason = entry.reason or "No reason provided"
+
+            embed = discord.Embed(
+                title="🔨 Member Banned",
+                color=discord.Color.red(),
+            )
+            embed.add_field(
+                name="User",
+                value=f"{target} (`{getattr(target, 'id', 'N/A')}`)",
+                inline=True,
+            )
+            embed.add_field(name="Moderator", value=str(moderator), inline=True)
+            embed.add_field(name="Reason", value=reason, inline=False)
+            await self._send_log(embed)
+
+        elif entry.action == discord.AuditLogAction.unban:
+            target = entry.target
+            moderator = entry.user or "Unknown"
+            reason = entry.reason or "No reason provided"
+
+            embed = discord.Embed(
+                title="🔓 Member Unbanned",
+                color=discord.Color.green(),
+            )
+            embed.add_field(
+                name="User",
+                value=f"{target} (`{getattr(target, 'id', 'N/A')}`)",
+                inline=True,
+            )
+            embed.add_field(name="Moderator", value=str(moderator), inline=True)
+            embed.add_field(name="Reason", value=reason, inline=False)
+            await self._send_log(embed)
+
+        elif entry.action == discord.AuditLogAction.kick:
+            target = entry.target
+            moderator = entry.user or "Unknown"
+            reason = entry.reason or "No reason provided"
+
+            embed = discord.Embed(
+                title="👢 Member Kicked",
+                color=discord.Color.orange(),
+            )
+            embed.add_field(
+                name="User",
+                value=f"{target} (`{getattr(target, 'id', 'N/A')}`)",
+                inline=True,
+            )
+            embed.add_field(name="Moderator", value=str(moderator), inline=True)
+            embed.add_field(name="Reason", value=reason, inline=False)
+            await self._send_log(embed)
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Logging(bot))
