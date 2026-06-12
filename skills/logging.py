@@ -4,7 +4,9 @@ from datetime import datetime
 import discord
 from discord.ext import commands
 
-from core.config import DATA_DIR
+import os
+
+from core.config import DATA_DIR, LOG_CHANNEL_ID
 
 
 CONFIG_FILE = DATA_DIR / "logging_config.json"
@@ -32,16 +34,30 @@ def format_dt(dt: datetime | None) -> str:
 class Logging(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        cfg = load_config()
-        self.log_channel_id: int | None = (
-            int(cfg["log_channel_id"]) if cfg.get("log_channel_id") else None
-        )
+
+        # Priority:
+        # 1. Environment variable (LOG_CHANNEL_ID) — survives Railway restarts/deploys
+        # 2. data/logging_config.json (local development or when using Railway Volume)
+        if LOG_CHANNEL_ID:
+            try:
+                self.log_channel_id: int | None = int(LOG_CHANNEL_ID)
+            except ValueError:
+                self.log_channel_id = None
+                print("[ERROR] Invalid LOG_CHANNEL_ID in environment variables.")
+        else:
+            cfg = load_config()
+            self.log_channel_id: int | None = (
+                int(cfg["log_channel_id"]) if cfg.get("log_channel_id") else None
+            )
+
         # Attach helper so other cogs can call: await bot.send_log(embed)
         self.bot.send_log = self._send_log  # type: ignore[attr-defined]
-        print("[LOG] Logging cog initialized. Log channel configured:", bool(self.log_channel_id))
+        source = "env var" if LOG_CHANNEL_ID else "config file"
+        print(f"[LOG] Logging cog initialized. Log channel configured: {bool(self.log_channel_id)} (source: {source})")
 
     async def _send_log(self, embed: discord.Embed) -> None:
         if not self.log_channel_id:
+            # Silent for normal operation; the init print already shows the status
             return
 
         channel = self.bot.get_channel(self.log_channel_id)
@@ -49,9 +65,11 @@ class Logging(commands.Cog):
             try:
                 channel = await self.bot.fetch_channel(self.log_channel_id)
             except Exception:
+                print(f"[LOG] Log channel {self.log_channel_id} not found (fetch failed).")
                 return
 
         if not isinstance(channel, discord.TextChannel):
+            print(f"[ERROR] Configured log channel {self.log_channel_id} is not a text channel.")
             return
 
         try:
@@ -64,8 +82,9 @@ class Logging(commands.Cog):
                 icon_url=guild.icon.url if guild and guild.icon else None,
             )
             await channel.send(embed=embed)
+            print(f"[LOG] Log sent to channel {self.log_channel_id}")
         except discord.Forbidden:
-            print("[ERROR] No permission to send to log channel.")
+            print("[ERROR] No permission to send to log channel. Check the channel permissions / role overwrites.")
         except Exception as e:
             print(f"[ERROR] Failed to send log: {e}")
 
@@ -119,6 +138,18 @@ class Logging(commands.Cog):
         embed.set_footer(text=f"Configured by {ctx.author.display_name}")
         await ctx.send(embed=embed, delete_after=10)
 
+        # Railway note for persistence
+        if not LOG_CHANNEL_ID:
+            note = discord.Embed(
+                description=(
+                    "⚠️ **Railway users**: This setting is stored in a file that resets on redeploy.\n"
+                    f"To make it permanent, go to your Railway service → **Variables** and add:\n"
+                    f"`LOG_CHANNEL_ID` = `{channel.id}`"
+                ),
+                color=discord.Color.orange(),
+            )
+            await ctx.send(embed=note, delete_after=20)
+
         # Send a test message to the log channel
         test = discord.Embed(
             title="✅ Logging Enabled",
@@ -162,6 +193,16 @@ class Logging(commands.Cog):
                     color=discord.Color.blurple(),
                 )
                 await ctx.send(embed=embed, delete_after=10)
+
+                if not LOG_CHANNEL_ID:
+                    note = discord.Embed(
+                        description=(
+                            "💡 Tip for Railway: Set `LOG_CHANNEL_ID` = "
+                            f"`{self.log_channel_id}` in your service Variables so it survives redeploys."
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                    await ctx.send(embed=note, delete_after=15)
                 return
 
         # 2. Look for any existing channel literally named "server-logs"
@@ -180,6 +221,16 @@ class Logging(commands.Cog):
                 color=discord.Color.green(),
             )
             await ctx.send(embed=embed, delete_after=12)
+
+            if not LOG_CHANNEL_ID:
+                note = discord.Embed(
+                    description=(
+                        "⚠️ **Railway users**: Add this as a Variable in the Railway dashboard for persistence across redeploys:\n"
+                        f"`LOG_CHANNEL_ID` = `{existing.id}`"
+                    ),
+                    color=discord.Color.orange(),
+                )
+                await ctx.send(embed=note, delete_after=20)
 
             # Send a confirmation/test inside the log channel
             test = discord.Embed(
@@ -234,6 +285,16 @@ class Logging(commands.Cog):
         )
         await ctx.send(embed=success, delete_after=12)
 
+        if not LOG_CHANNEL_ID:
+            note = discord.Embed(
+                description=(
+                    "⚠️ **Railway users**: To keep this setting after future redeploys, go to Railway → Variables and set:\n"
+                    f"`LOG_CHANNEL_ID` = `{log_channel.id}`"
+                ),
+                color=discord.Color.orange(),
+            )
+            await ctx.send(embed=note, delete_after=20)
+
         # Welcome message inside the new log channel
         welcome = discord.Embed(
             title="✅ Server Logs Active",
@@ -258,6 +319,8 @@ class Logging(commands.Cog):
                 desc = f"Current log channel: {ch.mention} (`{ch.id}`)"
             else:
                 desc = f"Configured channel ID `{self.log_channel_id}` (channel not found in this server)."
+            source = " (from LOG_CHANNEL_ID env var)" if LOG_CHANNEL_ID else " (from config file)"
+            desc += source
         else:
             desc = "No log channel configured.\nUse `c!setlogs #channel` or `c!createlogs`."
 
