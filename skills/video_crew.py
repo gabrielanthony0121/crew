@@ -52,31 +52,36 @@ class VideoCrew(commands.Cog):
 
             # Still in the channel and still no camera → enforce
             channel_name = current_channel.name
+
+            # Send DM first (while the user is still in the channel) — more reliable
+            dm_sent = False
+            try:
+                embed = discord.Embed(
+                    title="📹 Camera Required — Video Crew Chat",
+                    description=(
+                        f"Hello {current_member.display_name},\n\n"
+                        f"You were removed from the **{channel_name}** voice channel because your camera was not enabled.\n\n"
+                        "This channel is reserved for active video participation. "
+                        "All members are required to have their **camera turned on** while connected. "
+                        "This policy ensures a high-quality, face-to-face conversation experience for everyone practicing languages together.\n\n"
+                        "To rejoin, please turn your camera on before connecting to the channel.\n\n"
+                        "Thank you for your understanding and cooperation!"
+                    ),
+                    color=discord.Color.orange(),
+                )
+                embed.set_footer(text="Language Crew • Video Crew Chat")
+                await current_member.send(embed=embed)
+                dm_sent = True
+                print(f"[LOG] DM sent successfully to {current_member} ({current_member.id})")
+            except discord.Forbidden:
+                print(f"[LOG] Could not send DM to {current_member} ({current_member.id}) — user has 'Allow direct messages from server members' turned OFF in their Discord privacy settings.")
+            except Exception as dm_err:
+                print(f"[ERROR] Unexpected error while sending DM to {current_member}: {dm_err}")
+
+            # Now disconnect the user from the voice channel
             try:
                 await current_member.move_to(None)
                 print(f"[LOG] Removed {current_member} ({current_member.id}) from '{channel_name}' (no camera after {CAMERA_GRACE_SECONDS}s)")
-
-                # Professional DM (all in English)
-                try:
-                    embed = discord.Embed(
-                        title="📹 Camera Required — Video Crew Chat",
-                        description=(
-                            f"Hello {current_member.display_name},\n\n"
-                            f"You were removed from the **{channel_name}** voice channel because your camera was not enabled.\n\n"
-                            "This channel is reserved for active video participation. "
-                            "All members are required to have their **camera turned on** while connected. "
-                            "This policy ensures a high-quality, face-to-face conversation experience for everyone practicing languages together.\n\n"
-                            "To rejoin, please turn your camera on before connecting to the channel.\n\n"
-                            "Thank you for your understanding and cooperation!"
-                        ),
-                        color=discord.Color.orange(),
-                    )
-                    embed.set_footer(text="Language Crew • Video Crew Chat")
-                    await current_member.send(embed=embed)
-                except discord.Forbidden:
-                    print(f"[LOG] Could not send DM to {current_member} (DMs closed or blocked)")
-                except Exception as dm_err:
-                    print(f"[ERROR] Failed to DM {current_member}: {dm_err}")
 
                 # Record in server logs (if logging cog is loaded)
                 if hasattr(self.bot, "send_log"):
@@ -94,6 +99,12 @@ class VideoCrew(commands.Cog):
                             value=f"Camera not turned on within the {CAMERA_GRACE_SECONDS}-second grace period.",
                             inline=False,
                         )
+                        if not dm_sent:
+                            log_embed.add_field(
+                                name="DM Status",
+                                value="❌ Failed to send private message (user has DMs from server members disabled in privacy settings)",
+                                inline=False,
+                            )
                         await self.bot.send_log(log_embed)
                     except Exception as log_err:
                         print(f"[ERROR] Failed to send enforcement log: {log_err}")
