@@ -16,6 +16,7 @@ SKILLS = [
     "skills.moderation",
     "skills.custom_vc",
     "skills.video_crew",
+    "skills.spam_clear",
 ]
 
 

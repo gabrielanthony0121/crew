@@ -570,17 +570,16 @@ class Moderation(commands.Cog):
         if hasattr(self.bot, "send_log"):
             await self.bot.send_log(log_embed)
 
-    @commands.command(name="review", aliases=["warnings", "warns", "check", "infractions"])
+    @commands.command(name="review")
     async def review(self, ctx: commands.Context, user_id: int = None):
         """
-        Comando de revisão/histórico de warns.
-        Nome principal: c!review
-        Aliases: c!warnings, c!warns, c!check, c!infractions
+        Review a member's warning history.
+        Only c!review (no extra aliases).
 
-        - Mostra total de warns
-        - Lista organizada (mais recentes primeiro) com data no formato brasileiro
-        - Thumbnail do avatar do usuário
-        - Se zero warns: mensagem de "clean record"
+        - Shows total warnings
+        - Lists warnings (most recent first) with Brazilian date format
+        - User's avatar thumbnail
+        - If no warnings: "Clean Record" message
         """
         if not self.has_permission(ctx.author):
             embed = discord.Embed(
@@ -608,7 +607,7 @@ class Moderation(commands.Cog):
 
         if user_id is None:
             embed = discord.Embed(
-                description="❌ Correct usage: `c!review <id>` (aliases: c!warnings, c!warns, c!check)",
+                description="❌ Correct usage: `c!review <id>`",
                 color=discord.Color.red(),
             )
             await ctx.send(embed=embed, delete_after=8)
@@ -666,202 +665,6 @@ class Moderation(commands.Cog):
             icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
         )
         await ctx.send(embed=embed)
-
-    @commands.command(name="spam")
-    async def spam(self, ctx: commands.Context, user_id: int = None):
-        """
-        Comando anti-spam rápido.
-        - Deleta mensagens do usuário em TODO o servidor (somente últimas 24 horas)
-        - Aplica mute automaticamente usando o mesmo sistema de cargo "Muted" do c!mute
-        - Mostra resumo claro (quantas msgs deletadas + status do mute)
-        - Não pede motivo (é spam por definição)
-        """
-        if not self.has_permission(ctx.author):
-            embed = discord.Embed(
-                description="❌ You don't have permission to use this command.",
-                color=discord.Color.red(),
-            )
-            await ctx.send(embed=embed, delete_after=8)
-            return
-
-        # Restrição de canal (resolve corretamente threads/posts de forum)
-        effective_id = self._get_mod_channel_id(ctx.channel)
-        if effective_id != MOD_COMMANDS_CHANNEL_ID:
-            print(f"[DEBUG] Mod command blocked - Effective ID: {effective_id} | Raw channel ID: {getattr(ctx.channel, 'id', None)} | Expected: {MOD_COMMANDS_CHANNEL_ID} | Command: {ctx.command}")
-            embed = discord.Embed(
-                description=(
-                    "❌ This command can only be used in the `mod commands` channel.\n\n"
-                    f"**Channel ID the bot sees (effective):** `{effective_id}`\n"
-                    f"**Configured ID:** `{MOD_COMMANDS_CHANNEL_ID}`\n\n"
-                    "If you are inside a thread or post inside the channel, the bot now correctly checks the parent channel."
-                ),
-                color=discord.Color.red(),
-            )
-            await ctx.send(embed=embed, delete_after=15)
-            return
-
-        if user_id is None:
-            embed = discord.Embed(
-                description="❌ Correct usage: `c!spam <id>`",
-                color=discord.Color.red(),
-            )
-            await ctx.send(embed=embed, delete_after=8)
-            return
-
-        member = await self.get_member(ctx, user_id)
-        if member is None:
-            return
-
-        if member == ctx.author:
-            embed = discord.Embed(
-                description="❌ You cannot use this command on yourself.",
-                color=discord.Color.red(),
-            )
-            await ctx.send(embed=embed, delete_after=8)
-            return
-
-        if member.top_role >= ctx.author.top_role and not ctx.author.guild_permissions.administrator:
-            embed = discord.Embed(
-                description="❌ You cannot moderate someone with an equal or higher role.",
-                color=discord.Color.red(),
-            )
-            await ctx.send(embed=embed, delete_after=8)
-            return
-
-        # Feedback imediato para o usuário saber que o comando começou (o purge server-wide pode demorar)
-        try:
-            feedback_msg = await ctx.send("⏳ Running `c!spam`: deleting user's messages server-wide (last 24h) + applying mute. This can take a while...")
-        except Exception:
-            feedback_msg = None
-
-        # 1. Deletar mensagens do membro em TODO o servidor (últimas 24 horas)
-        # O purge é feito canal por canal (limitação do Discord). Apenas canais onde o bot tem permissão de gerenciar mensagens.
-        deleted_count = 0
-        after_time = discord.utils.utcnow() - datetime.timedelta(hours=24)
-
-        def check_author(m: discord.Message) -> bool:
-            return m.author.id == member.id
-
-        for ch in ctx.guild.text_channels:
-            # Pula canais onde o bot não tem permissão para deletar mensagens
-            perms = ch.permissions_for(ctx.guild.me)
-            if not perms.manage_messages:
-                continue
-            try:
-                deleted_msgs = await ch.purge(
-                    limit=100,
-                    check=check_author,
-                    after=after_time
-                )
-                deleted_count += len(deleted_msgs)
-                if deleted_count and deleted_count % 20 == 0:
-                    print(f"[LOG] c!spam progress: {deleted_count} messages deleted so far...")
-            except discord.Forbidden:
-                pass
-            except Exception as e:
-                print(f"[ERROR] Spam purge failed in channel {ch.name} ({ch.id}): {e}")
-
-        # Tenta apagar a mensagem de "carregando" para não poluir
-        if feedback_msg:
-            try:
-                await feedback_msg.delete()
-            except Exception:
-                pass
-
-        # 2. Aplicar mute reutilizando a mesma lógica do c!mute original (duplicação intencional
-        #    para não alterar o código do mute e não criar helpers, conforme solicitado).
-        #    Isso garante que c!unmute continue funcionando para mutes de spam.
-        mute_reason = "Spam / mass messaging (via c!spam command)"
-        mute_success = False
-
-        muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
-        if muted_role is None:
-            try:
-                muted_role = await ctx.guild.create_role(
-                    name="Muted",
-                    color=discord.Color.from_rgb(128, 128, 128),
-                    reason="Auto-created by bot",
-                )
-                for channel in ctx.guild.channels:
-                    await channel.set_permissions(
-                        muted_role,
-                        send_messages=False,
-                        speak=False,
-                        add_reactions=False,
-                    )
-            except discord.Forbidden:
-                muted_role = None
-
-        if muted_role is not None:
-            if muted_role in member.roles:
-                mute_success = True  # já estava mutado
-            else:
-                try:
-                    await member.add_roles(muted_role, reason=mute_reason)
-                    mute_success = True
-                except discord.Forbidden:
-                    mute_success = False
-                except Exception:
-                    mute_success = False
-
-        # Deleta a mensagem do comando
-        try:
-            await ctx.message.delete()
-        except Exception:
-            pass
-
-        # Embed de resumo da ação
-        embed = discord.Embed(title="🚫 Spam Action Taken", color=discord.Color.red())
-        embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
-        embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
-
-        if deleted_count > 0:
-            deleted_text = f"{deleted_count} message(s) deleted server-wide (last 24 hours)."
-        else:
-            deleted_text = "No messages from this user found in the server in the last 24 hours."
-
-        embed.add_field(
-            name="🗑️ Messages Deleted",
-            value=deleted_text,
-            inline=False,
-        )
-
-        if mute_success:
-            embed.add_field(
-                name="✅ Mute Applied",
-                value="Member was muted using the server's `Muted` role system.\nUse `c!unmute` to remove when appropriate.",
-                inline=False,
-            )
-        else:
-            embed.add_field(
-                name="❌ Mute Failed",
-                value="Could not apply the Muted role (check bot permissions and role hierarchy).",
-                inline=False,
-            )
-
-        embed.set_footer(
-            text=f"Action logged • Server: {ctx.guild.name}",
-            icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
-        )
-        await ctx.send(embed=embed)
-
-        print(f"[LOG] Spam | {member} ({member.id}) | Deleted: {deleted_count} | Mute: {mute_success} | By: {ctx.author}")
-
-        # Log detalhado no canal de logs
-        log_embed = discord.Embed(
-            title="🚫 Spam Action Taken",
-            color=discord.Color.red(),
-            timestamp=discord.utils.utcnow()
-        )
-        log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-        log_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
-        log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
-        log_embed.add_field(name="Messages Deleted (server, 24h)", value=str(deleted_count), inline=True)
-        log_embed.add_field(name="Mute Applied", value="Yes" if mute_success else "No", inline=True)
-        log_embed.add_field(name="User ID", value=str(member.id), inline=True)
-        if hasattr(self.bot, "send_log"):
-            await self.bot.send_log(log_embed)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Moderation(bot))
