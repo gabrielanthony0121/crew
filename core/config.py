@@ -24,3 +24,7 @@ ALLOWED_ROLE_IDS: list[int] = [
 _raw_video_id = os.getenv("VIDEO_CREW_CHAT_ID")
 VIDEO_CREW_CHAT_ID: int | None = int(_raw_video_id) if _raw_video_id else 1503224954718781463
 CAMERA_GRACE_SECONDS: int = 20
+
+# Moderation Announcements channel (read-only, where the permanent guide embed lives)
+# This is the channel ID you provided: 1508675774943723593
+MOD_ANNOUNCEMENTS_CHANNEL_ID: int = 1508675774943723593
