@@ -2,6 +2,9 @@ import discord
 from discord.ext import commands
 from datetime import timedelta
 
+# Channel restriction - same as other mod commands
+MOD_COMMANDS_CHANNEL_ID = 1508675820967690311
+
 
 class SpamClear(commands.Cog):
     """Dedicated cog for server-wide spam message clearing (last 2 hours)."""
@@ -32,6 +35,15 @@ class SpamClear(commands.Cog):
         if user_id is None:
             embed = discord.Embed(
                 description="❌ Correct usage: `c!spam <user_id>`",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        # Channel restriction (only in mod commands channel)
+        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
+            embed = discord.Embed(
+                description="❌ This command can only be used in the `mod commands` channel.",
                 color=discord.Color.red(),
             )
             await ctx.send(embed=embed, delete_after=8)
@@ -98,6 +110,42 @@ class SpamClear(commands.Cog):
                 channels_affected += 1
                 total_deleted += channel_deleted
 
+        # Apply mute (same logic as other mod commands, duplicated to keep files independent)
+        mute_success = False
+        mute_reason = "Spam / mass messaging (via c!spam command)"
+        muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
+        if muted_role is None:
+            try:
+                muted_role = await ctx.guild.create_role(
+                    name="Muted",
+                    color=discord.Color.from_rgb(128, 128, 128),
+                    reason="Auto-created by bot",
+                )
+                for channel in ctx.guild.channels:
+                    await channel.set_permissions(
+                        muted_role,
+                        send_messages=False,
+                        speak=False,
+                        add_reactions=False,
+                    )
+            except discord.Forbidden:
+                muted_role = None
+
+        if muted_role is not None:
+            try:
+                # Ensure we have a Member object for roles
+                if not isinstance(target, discord.Member):
+                    target = await ctx.guild.fetch_member(user_id)
+                if muted_role in target.roles:
+                    mute_success = True
+                else:
+                    await target.add_roles(muted_role, reason=mute_reason)
+                    mute_success = True
+            except discord.Forbidden:
+                mute_success = False
+            except Exception:
+                mute_success = False
+
         # Send confirmation embed (compact & professional, stays in chat)
         embed = discord.Embed(
             title="🧹 Messages Cleared",
@@ -106,7 +154,8 @@ class SpamClear(commands.Cog):
         )
         embed.add_field(name="Deleted", value=f"{total_deleted} messages", inline=True)
         embed.add_field(name="Channels", value=str(channels_affected), inline=True)
-        embed.add_field(name="Period", value="Last 2 hours", inline=True)
+        embed.add_field(name="Mute", value="✅ Applied" if mute_success else "❌ Failed", inline=True)
+        embed.add_field(name="Period", value="Last 2 hours", inline=False)
         embed.set_footer(text=f"Action by {ctx.author.display_name} • {ctx.guild.name}")
 
         await ctx.send(embed=embed)

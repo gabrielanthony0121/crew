@@ -97,6 +97,7 @@ class Moderation(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         init_warnings_db()  # Inicializa o banco de warnings na carga do cog (cria tabela se necessário)
+        print(f"[LOG] Warnings database loaded from: {WARNINGS_DB} (persistence depends on Railway Volume for data/ folder)")
 
     def has_permission(self, author: discord.Member) -> bool:
         return (
@@ -621,10 +622,17 @@ class Moderation(commands.Cog):
 
         if not warns:
             embed = discord.Embed(
-                description=f"✅ {member.mention} (`{member.id}`) has no warnings on record.",
+                title="✅ Clean Record",
                 color=discord.Color.green(),
             )
             embed.set_thumbnail(url=member.display_avatar.url)
+            embed.add_field(name="Total Warnings", value="0", inline=True)
+            embed.add_field(name="User ID", value=str(member.id), inline=True)
+            embed.add_field(
+                name="Status",
+                value=f"{member.mention} has no warnings on record.",
+                inline=False,
+            )
             embed.set_footer(text=f"Requested by {ctx.author.display_name}")
             await ctx.send(embed=embed)
             return
