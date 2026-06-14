@@ -7,6 +7,11 @@ from discord.ext import commands
 from core.config import DATA_DIR
 
 
+# ID do canal exclusivo de comandos de moderação (fornecido pelo usuário)
+# Todos os comandos novos (warn, review, spam) só funcionam neste canal.
+MOD_COMMANDS_CHANNEL_ID: int = 1508675820967690311
+
+
 # ==================== SISTEMA DE WARNINGS (SQLite) ====================
 # Banco de dados persistente para registrar warns de forma duradoura.
 # Arquivo: data/warnings.db (dentro da pasta data/ do projeto)
@@ -471,8 +476,8 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Restrição: comando só pode ser usado no canal de moderação "mod commands"
-        if getattr(ctx.channel, "name", "") != "mod commands":
+        # Restrição: comando só pode ser usado no canal de moderação (por ID)
+        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
             embed = discord.Embed(
                 description="❌ This command can only be used in the `mod commands` channel.",
                 color=discord.Color.red(),
@@ -591,8 +596,8 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Restrição: comando só pode ser usado no canal de moderação "mod commands"
-        if getattr(ctx.channel, "name", "") != "mod commands":
+        # Restrição: comando só pode ser usado no canal de moderação (por ID)
+        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
             embed = discord.Embed(
                 description="❌ This command can only be used in the `mod commands` channel.",
                 color=discord.Color.red(),
@@ -678,8 +683,8 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Restrição: comando só pode ser usado no canal de moderação "mod commands"
-        if getattr(ctx.channel, "name", "") != "mod commands":
+        # Restrição: comando só pode ser usado no canal de moderação (por ID)
+        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
             embed = discord.Embed(
                 description="❌ This command can only be used in the `mod commands` channel.",
                 color=discord.Color.red(),
