@@ -54,6 +54,7 @@ def add_warning(guild_id: int, user_id: int, moderator_id: int, reason: str) -> 
     warning_id = c.lastrowid
     conn.commit()
     conn.close()
+    print(f"[DEBUG] Warning saved | ID={warning_id} | Guild={guild_id} | User={user_id} | Mod={moderator_id} | Reason={reason[:50]}")
     return warning_id
 
 
@@ -88,6 +89,7 @@ def get_user_warnings(guild_id: int, user_id: int) -> list[dict]:
             "reason": row[2],
             "timestamp": formatted
         })
+    print(f"[DEBUG] Review query | Guild={guild_id} | User={user_id} | Found={len(warnings_list)} warns")
     return warnings_list
 
 
@@ -530,29 +532,9 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Persiste no banco
+        # Persiste no banco (apenas para staff/moderadores - sem aviso ao membro)
         clean_reason = reason.strip()
         warning_id = add_warning(ctx.guild.id, member.id, ctx.author.id, clean_reason)
-
-        # Tenta notificar por DM (opção solicitada)
-        dm_sent = False
-        try:
-            dm_embed = discord.Embed(
-                title="⚠️ You received a warning",
-                description=(
-                    f"**Server:** {ctx.guild.name}\n"
-                    f"**Reason:** {clean_reason}\n"
-                    f"**Moderator:** {ctx.author.mention}\n\n"
-                    "Please follow the server rules to avoid further action."
-                ),
-                color=discord.Color.orange(),
-            )
-            dm_embed.set_footer(text=f"Warning ID: {warning_id}")
-            await member.send(embed=dm_embed)
-            dm_sent = True
-        except Exception:
-            # Usuário pode ter DMs fechadas ou bloqueado o bot
-            pass
 
         # Deleta a mensagem do comando (padrão dos comandos de moderação)
         try:
@@ -560,15 +542,11 @@ class Moderation(commands.Cog):
         except Exception:
             pass
 
-        # Embed público de confirmação (estilo consistente com mute/ban)
+        # Embed público de confirmação (apenas para moderação - sem notificação ao membro)
         embed = discord.Embed(title="⚠️ Member Warned", color=discord.Color.orange())
         embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
         embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
         embed.add_field(name="📋 Reason", value=clean_reason, inline=False)
-        if dm_sent:
-            embed.add_field(name="📨 Notification", value="User was notified via DM.", inline=False)
-        else:
-            embed.add_field(name="📨 Notification", value="Could not send DM (user may have DMs disabled).", inline=False)
         embed.set_footer(
             text=f"Action logged • Server: {ctx.guild.name}",
             icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
@@ -693,7 +671,7 @@ class Moderation(commands.Cog):
     async def spam(self, ctx: commands.Context, user_id: int = None):
         """
         Comando anti-spam rápido.
-        - Deleta mensagens recentes do usuário **apenas no canal atual**
+        - Deleta mensagens do usuário em TODO o servidor (somente últimas 24 horas)
         - Aplica mute automaticamente usando o mesmo sistema de cargo "Muted" do c!mute
         - Mostra resumo claro (quantas msgs deletadas + status do mute)
         - Não pede motivo (é spam por definição)
@@ -750,29 +728,31 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # 1. Deletar mensagens recentes do membro neste canal (usando purge com check)
+        # 1. Deletar mensagens do membro em TODO o servidor (últimas 24 horas)
+        # O purge é feito canal por canal (limitação do Discord). Apenas canais onde o bot tem permissão de gerenciar mensagens.
         deleted_count = 0
-        try:
-            def check_author(m: discord.Message) -> bool:
-                return m.author.id == member.id
+        after_time = discord.utils.utcnow() - datetime.timedelta(hours=24)
 
-            # Limite 50 é razoável e seguro. Purge só funciona em mensagens < 14 dias.
-            deleted_messages = await ctx.channel.purge(
-                limit=50,
-                check=check_author,
-                before=ctx.message,  # não tenta apagar o próprio comando
-            )
-            deleted_count = len(deleted_messages)
-        except discord.Forbidden:
-            # Bot sem permissão de gerenciar mensagens no canal
-            embed = discord.Embed(
-                description="❌ I don't have permission to delete messages in this channel.",
-                color=discord.Color.red(),
-            )
-            await ctx.send(embed=embed, delete_after=8)
-            # Continua para aplicar o mute mesmo assim (melhor punir de alguma forma)
-        except Exception as e:
-            print(f"[ERROR] Spam purge failed: {e}")
+        def check_author(m: discord.Message) -> bool:
+            return m.author.id == member.id
+
+        for ch in ctx.guild.text_channels:
+            # Pula canais onde o bot não tem permissão para deletar mensagens
+            perms = ch.permissions_for(ctx.guild.me)
+            if not perms.manage_messages:
+                continue
+            try:
+                deleted_msgs = await ch.purge(
+                    limit=100,
+                    check=check_author,
+                    after=after_time
+                )
+                deleted_count += len(deleted_msgs)
+            except discord.Forbidden:
+                # Sem permissão neste canal específico (ignora e continua)
+                pass
+            except Exception as e:
+                print(f"[ERROR] Spam purge failed in channel {ch.name} ({ch.id}): {e}")
 
         # 2. Aplicar mute reutilizando a mesma lógica do c!mute original (duplicação intencional
         #    para não alterar o código do mute e não criar helpers, conforme solicitado).
@@ -820,21 +800,27 @@ class Moderation(commands.Cog):
         embed = discord.Embed(title="🚫 Spam Action Taken", color=discord.Color.red())
         embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
         embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
+
+        if deleted_count > 0:
+            deleted_text = f"{deleted_count} message(s) deleted server-wide (last 24 hours)."
+        else:
+            deleted_text = "No messages from this user found in the server in the last 24 hours."
+
         embed.add_field(
             name="🗑️ Messages Deleted",
-            value=f"{deleted_count} recent message(s) deleted in this channel.",
+            value=deleted_text,
             inline=False,
         )
 
         if mute_success:
             embed.add_field(
-                name="🔇 Mute Applied",
+                name="✅ Mute Applied",
                 value="Member was muted using the server's `Muted` role system.\nUse `c!unmute` to remove when appropriate.",
                 inline=False,
             )
         else:
             embed.add_field(
-                name="🔇 Mute Failed",
+                name="❌ Mute Failed",
                 value="Could not apply the Muted role (check bot permissions and role hierarchy).",
                 inline=False,
             )
@@ -856,7 +842,7 @@ class Moderation(commands.Cog):
         log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         log_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
         log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
-        log_embed.add_field(name="Messages Deleted (channel)", value=str(deleted_count), inline=True)
+        log_embed.add_field(name="Messages Deleted (server, 24h)", value=str(deleted_count), inline=True)
         log_embed.add_field(name="Mute Applied", value="Yes" if mute_success else "No", inline=True)
         log_embed.add_field(name="User ID", value=str(member.id), inline=True)
         if hasattr(self.bot, "send_log"):
