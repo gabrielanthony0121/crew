@@ -118,6 +118,15 @@ class Moderation(commands.Cog):
                 return None
         return member
 
+    def _get_mod_channel_id(self, channel) -> int:
+        """Resolve o ID 'efetivo' do canal para a restrição de moderação.
+        Se o usuário estiver dentro de um Thread/Post (muito comum quando o canal é um Forum ou tem threads),
+        usamos o ID do canal pai em vez do ID do thread.
+        """
+        if isinstance(channel, discord.Thread):
+            return getattr(getattr(channel, "parent", None), "id", channel.id)
+        return getattr(channel, "id", 0)
+
     @commands.command(name="mute")
     async def mute(
         self,
@@ -476,13 +485,20 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Restrição: comando só pode ser usado no canal de moderação (por ID)
-        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
+        # Restrição de canal (resolve corretamente threads/posts de forum)
+        effective_id = self._get_mod_channel_id(ctx.channel)
+        if effective_id != MOD_COMMANDS_CHANNEL_ID:
+            print(f"[DEBUG] Mod command blocked - Effective ID: {effective_id} | Raw channel ID: {getattr(ctx.channel, 'id', None)} | Expected: {MOD_COMMANDS_CHANNEL_ID} | Command: {ctx.command}")
             embed = discord.Embed(
-                description="❌ This command can only be used in the `mod commands` channel.",
+                description=(
+                    "❌ This command can only be used in the `mod commands` channel.\n\n"
+                    f"**Channel ID the bot sees (effective):** `{effective_id}`\n"
+                    f"**Configured ID:** `{MOD_COMMANDS_CHANNEL_ID}`\n\n"
+                    "If you are inside a thread or post inside the channel, the bot now correctly checks the parent channel."
+                ),
                 color=discord.Color.red(),
             )
-            await ctx.send(embed=embed, delete_after=8)
+            await ctx.send(embed=embed, delete_after=15)
             return
 
         if user_id is None or reason is None or len(reason.strip()) < 4:
@@ -596,13 +612,20 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Restrição: comando só pode ser usado no canal de moderação (por ID)
-        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
+        # Restrição de canal (resolve corretamente threads/posts de forum)
+        effective_id = self._get_mod_channel_id(ctx.channel)
+        if effective_id != MOD_COMMANDS_CHANNEL_ID:
+            print(f"[DEBUG] Mod command blocked - Effective ID: {effective_id} | Raw channel ID: {getattr(ctx.channel, 'id', None)} | Expected: {MOD_COMMANDS_CHANNEL_ID} | Command: {ctx.command}")
             embed = discord.Embed(
-                description="❌ This command can only be used in the `mod commands` channel.",
+                description=(
+                    "❌ This command can only be used in the `mod commands` channel.\n\n"
+                    f"**Channel ID the bot sees (effective):** `{effective_id}`\n"
+                    f"**Configured ID:** `{MOD_COMMANDS_CHANNEL_ID}`\n\n"
+                    "If you are inside a thread or post inside the channel, the bot now correctly checks the parent channel."
+                ),
                 color=discord.Color.red(),
             )
-            await ctx.send(embed=embed, delete_after=8)
+            await ctx.send(embed=embed, delete_after=15)
             return
 
         if user_id is None:
@@ -683,13 +706,20 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        # Restrição: comando só pode ser usado no canal de moderação (por ID)
-        if ctx.channel.id != MOD_COMMANDS_CHANNEL_ID:
+        # Restrição de canal (resolve corretamente threads/posts de forum)
+        effective_id = self._get_mod_channel_id(ctx.channel)
+        if effective_id != MOD_COMMANDS_CHANNEL_ID:
+            print(f"[DEBUG] Mod command blocked - Effective ID: {effective_id} | Raw channel ID: {getattr(ctx.channel, 'id', None)} | Expected: {MOD_COMMANDS_CHANNEL_ID} | Command: {ctx.command}")
             embed = discord.Embed(
-                description="❌ This command can only be used in the `mod commands` channel.",
+                description=(
+                    "❌ This command can only be used in the `mod commands` channel.\n\n"
+                    f"**Channel ID the bot sees (effective):** `{effective_id}`\n"
+                    f"**Configured ID:** `{MOD_COMMANDS_CHANNEL_ID}`\n\n"
+                    "If you are inside a thread or post inside the channel, the bot now correctly checks the parent channel."
+                ),
                 color=discord.Color.red(),
             )
-            await ctx.send(embed=embed, delete_after=8)
+            await ctx.send(embed=embed, delete_after=15)
             return
 
         if user_id is None:
