@@ -49,8 +49,12 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
         return
 
     if isinstance(error, commands.BadArgument):
+        cmd = ctx.command.name if ctx.command else "command"
         embed = discord.Embed(
-            description="❌ Invalid argument. Make sure you mentioned a valid text channel (e.g. `c!setlogs #channel`).",
+            description=(
+                f"❌ Invalid argument for `c!{cmd}`.\n"
+                "Please use the correct format (e.g. numeric user ID like `c!review 123456789012345678`)."
+            ),
             color=discord.Color.red(),
         )
         await ctx.send(embed=embed, delete_after=8)
