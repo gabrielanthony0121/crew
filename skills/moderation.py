@@ -728,6 +728,12 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
+        # Feedback imediato para o usuário saber que o comando começou (o purge server-wide pode demorar)
+        try:
+            feedback_msg = await ctx.send("⏳ Running `c!spam`: deleting user's messages server-wide (last 24h) + applying mute. This can take a while...")
+        except Exception:
+            feedback_msg = None
+
         # 1. Deletar mensagens do membro em TODO o servidor (últimas 24 horas)
         # O purge é feito canal por canal (limitação do Discord). Apenas canais onde o bot tem permissão de gerenciar mensagens.
         deleted_count = 0
@@ -748,11 +754,19 @@ class Moderation(commands.Cog):
                     after=after_time
                 )
                 deleted_count += len(deleted_msgs)
+                if deleted_count and deleted_count % 20 == 0:
+                    print(f"[LOG] c!spam progress: {deleted_count} messages deleted so far...")
             except discord.Forbidden:
-                # Sem permissão neste canal específico (ignora e continua)
                 pass
             except Exception as e:
                 print(f"[ERROR] Spam purge failed in channel {ch.name} ({ch.id}): {e}")
+
+        # Tenta apagar a mensagem de "carregando" para não poluir
+        if feedback_msg:
+            try:
+                await feedback_msg.delete()
+            except Exception:
+                pass
 
         # 2. Aplicar mute reutilizando a mesma lógica do c!mute original (duplicação intencional
         #    para não alterar o código do mute e não criar helpers, conforme solicitado).
