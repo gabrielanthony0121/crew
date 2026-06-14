@@ -98,28 +98,18 @@ class SpamClear(commands.Cog):
                 channels_affected += 1
                 total_deleted += channel_deleted
 
-        # Send confirmation embed (English only)
+        # Send confirmation embed (compact & professional, stays in chat)
         embed = discord.Embed(
-            title="🧹 Spam Clear Completed",
+            title="🧹 Messages Cleared",
+            description=f"**{getattr(target, 'mention', f'<@{user_id}>')}** (`{user_id}`)",
             color=discord.Color.green() if total_deleted > 0 else discord.Color.orange(),
         )
+        embed.add_field(name="Deleted", value=f"{total_deleted} messages", inline=True)
+        embed.add_field(name="Channels", value=str(channels_affected), inline=True)
+        embed.add_field(name="Period", value="Last 2 hours", inline=True)
+        embed.set_footer(text=f"Action by {ctx.author.display_name} • {ctx.guild.name}")
 
-        if target:
-            embed.description = f"Messages from **{target}** (`{user_id}`) cleared from the server."
-        else:
-            embed.description = f"Messages from user ID `{user_id}` cleared from the server."
-
-        embed.add_field(name="Messages Deleted", value=str(total_deleted), inline=True)
-        embed.add_field(name="Channels Affected", value=str(channels_affected), inline=True)
-        embed.add_field(name="Timeframe", value="Last 2 hours", inline=True)
-        embed.set_footer(text=f"Executed by {ctx.author.display_name}")
-
-        # Send embed and auto-delete after 10 seconds
-        confirmation = await ctx.send(embed=embed)
-        try:
-            await confirmation.delete(delay=10)
-        except Exception:
-            pass
+        await ctx.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):

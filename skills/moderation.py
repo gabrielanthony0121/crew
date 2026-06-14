@@ -621,15 +621,11 @@ class Moderation(commands.Cog):
 
         if not warns:
             embed = discord.Embed(
-                title="✅ Clean Record",
-                description=f"{member.mention} (`{member.id}`) has no warnings on record.",
+                description=f"✅ {member.mention} (`{member.id}`) has no warnings on record.",
                 color=discord.Color.green(),
             )
             embed.set_thumbnail(url=member.display_avatar.url)
-            embed.set_footer(
-                text=f"Requested by {ctx.author.display_name} • Server: {ctx.guild.name}",
-                icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
-            )
+            embed.set_footer(text=f"Requested by {ctx.author.display_name}")
             await ctx.send(embed=embed)
             return
 
