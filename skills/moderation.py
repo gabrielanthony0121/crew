@@ -670,5 +670,21 @@ class Moderation(commands.Cog):
         )
         await ctx.send(embed=embed)
 
+    @commands.command(name="sendmodguide")
+    @commands.has_permissions(administrator=True)
+    async def send_mod_guide(self, ctx):
+        """Envia (ou reenvia) o guia permanente de moderação no canal de anúncios."""
+        from skills.mod_guide import get_mod_guide_embed
+        from core.config import MOD_ANNOUNCEMENTS_CHANNEL_ID
+
+        embed = await get_mod_guide_embed()
+
+        channel = self.bot.get_channel(MOD_ANNOUNCEMENTS_CHANNEL_ID)
+        if channel is None:
+            channel = await self.bot.fetch_channel(MOD_ANNOUNCEMENTS_CHANNEL_ID)
+
+        await channel.send(embed=embed)
+        await ctx.send("✅ Guia de moderação enviado para #mod-announcements!", delete_after=8)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(Moderation(bot))
