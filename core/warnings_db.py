@@ -116,6 +116,8 @@ def _migrate_sqlite_to_postgres() -> int:
 
 
 def init_warnings_db() -> None:
+    print(f"[LOG] DATABASE_URL configured: {using_postgres()}")
+
     if using_postgres():
         _init_postgres()
         _migrate_sqlite_to_postgres()
