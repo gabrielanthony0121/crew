@@ -4,12 +4,29 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+
+# DATA_DIR configuration for persistence
+# - Local development: uses ./data relative to project root
+# - Railway: set DATA_DIR env var + mount a Volume to that path (recommended: /data)
+_data_dir_env = os.getenv("DATA_DIR")
+if _data_dir_env:
+    DATA_DIR = Path(_data_dir_env)
+else:
+    DATA_DIR = BASE_DIR / "data"
 
 load_dotenv(BASE_DIR / ".env")
 
+# Log the data directory (useful to confirm Railway Volume is mounted correctly)
+print(f"[LOG] DATA_DIR configured as: {DATA_DIR.resolve()}")
+
+# Ensure the directory exists on startup (safe to call multiple times)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 COMMAND_PREFIX = "c!"
+
+# PostgreSQL (Railway sets DATABASE_URL automatically when you add a Postgres service)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Persisted via Railway Variables (recommended for production) or data/*.json (local / volume)
 LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")

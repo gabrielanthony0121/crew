@@ -1,10 +1,7 @@
-import sqlite3
-from datetime import datetime
-
 import discord
 from discord.ext import commands
 
-from core.config import DATA_DIR
+from core.warnings_db import add_warning, get_user_warnings, init_warnings_db
 
 
 # ID do canal exclusivo de comandos de moderação (fornecido pelo usuário)
@@ -12,92 +9,10 @@ from core.config import DATA_DIR
 MOD_COMMANDS_CHANNEL_ID: int = 1508675820967690311
 
 
-# ==================== SISTEMA DE WARNINGS (SQLite) ====================
-# Banco de dados persistente para registrar warns de forma duradoura.
-# Arquivo: data/warnings.db (dentro da pasta data/ do projeto)
-# Tabela contém guild_id para facilitar expansão futura para multi-guild.
-
-WARNINGS_DB = DATA_DIR / "warnings.db"
-
-
-def init_warnings_db() -> None:
-    """Cria o diretório de dados (se necessário) e a tabela de warnings."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(WARNINGS_DB)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS warnings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            guild_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            moderator_id INTEGER NOT NULL,
-            reason TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-
-def add_warning(guild_id: int, user_id: int, moderator_id: int, reason: str) -> int:
-    """
-    Adiciona um novo warn no banco de dados.
-    Retorna o ID (auto-increment) do warn recém-criado.
-    """
-    conn = sqlite3.connect(WARNINGS_DB)
-    c = conn.cursor()
-    ts = datetime.utcnow().isoformat()
-    c.execute("""
-        INSERT INTO warnings (guild_id, user_id, moderator_id, reason, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    """, (guild_id, user_id, moderator_id, reason, ts))
-    warning_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    print(f"[DEBUG] Warning saved | ID={warning_id} | Guild={guild_id} | User={user_id} | Mod={moderator_id} | Reason={reason[:50]}")
-    return warning_id
-
-
-def get_user_warnings(guild_id: int, user_id: int) -> list[dict]:
-    """
-    Busca todos os warns de um usuário no servidor.
-    Retorna lista de dicionários ordenada do mais recente para o mais antigo.
-    Cada item: {id, moderator_id, reason, timestamp (formatado DD/MM/YYYY às HH:MM)}
-    """
-    conn = sqlite3.connect(WARNINGS_DB)
-    c = conn.cursor()
-    c.execute("""
-        SELECT id, moderator_id, reason, timestamp
-        FROM warnings
-        WHERE guild_id = ? AND user_id = ?
-        ORDER BY timestamp DESC
-    """, (guild_id, user_id))
-    rows = c.fetchall()
-    conn.close()
-
-    warnings_list = []
-    for row in rows:
-        try:
-            dt = datetime.fromisoformat(row[3])
-            formatted = dt.strftime("%d/%m/%Y às %H:%M")
-        except Exception:
-            formatted = row[3] or "Data desconhecida"
-
-        warnings_list.append({
-            "id": row[0],
-            "moderator_id": row[1],
-            "reason": row[2],
-            "timestamp": formatted
-        })
-    print(f"[DEBUG] Review query | Guild={guild_id} | User={user_id} | Found={len(warnings_list)} warns")
-    return warnings_list
-
-
 class Moderation(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        init_warnings_db()  # Inicializa o banco de warnings na carga do cog (cria tabela se necessário)
-        print(f"[LOG] Warnings database loaded from: {WARNINGS_DB} (persistence depends on Railway Volume for data/ folder)")
+        init_warnings_db()
 
     def has_permission(self, author: discord.Member) -> bool:
         return (
@@ -474,7 +389,7 @@ class Moderation(commands.Cog):
         reason: str = None,
     ):
         """
-        Registra um warn persistente para um membro (armazenado em SQLite).
+        Registra um warn persistente para um membro (PostgreSQL no Railway, SQLite local).
         - Aceita ID numérico
         - Valida que o motivo não está vazio e tem tamanho mínimo
         - Tenta avisar o usuário por DM (falha silenciosa se DMs bloqueadas)
