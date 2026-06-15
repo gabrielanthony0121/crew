@@ -25,8 +25,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 TOKEN = os.getenv("DISCORD_TOKEN")
 COMMAND_PREFIX = "c!"
 
-# PostgreSQL (Railway sets DATABASE_URL automatically when you add a Postgres service)
-DATABASE_URL = os.getenv("DATABASE_URL")
+# PostgreSQL — Railway exposes DATABASE_URL (public) and DATABASE_PRIVATE_URL (internal).
+# Accept either; reference one of them from the Postgres service in Railway Variables.
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PRIVATE_URL")
 
 # Persisted via Railway Variables (recommended for production) or data/*.json (local / volume)
 LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")

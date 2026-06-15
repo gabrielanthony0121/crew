@@ -116,7 +116,14 @@ def _migrate_sqlite_to_postgres() -> int:
 
 
 def init_warnings_db() -> None:
-    print(f"[LOG] DATABASE_URL configured: {using_postgres()}")
+    import os
+
+    has_public = bool(os.getenv("DATABASE_URL"))
+    has_private = bool(os.getenv("DATABASE_PRIVATE_URL"))
+    print(
+        f"[LOG] Postgres env | DATABASE_URL={has_public} | "
+        f"DATABASE_PRIVATE_URL={has_private} | active={using_postgres()}"
+    )
 
     if using_postgres():
         _init_postgres()
