@@ -54,3 +54,9 @@ CREW_BOOSTER_ROLE_ID: int = 1503545672207438004
 # Thumbnail always uses the server icon. CREW_PERKS_THUMBNAIL_URL is an optional banner fallback.
 CREW_PERKS_THUMBNAIL_URL: str | None = os.getenv("CREW_PERKS_THUMBNAIL_URL")
 CREW_PERKS_BANNER_URL: str | None = os.getenv("CREW_PERKS_BANNER_URL")
+
+# Quill Tips panel (#tips or similar)
+_raw_tips_channel = os.getenv("TIPS_CHANNEL_ID")
+TIPS_CHANNEL_ID: int | None = int(_raw_tips_channel) if _raw_tips_channel else None
+_raw_tips_review = os.getenv("TIPS_REVIEW_CHANNEL_ID")
+TIPS_REVIEW_CHANNEL_ID: int | None = int(_raw_tips_review) if _raw_tips_review else None
