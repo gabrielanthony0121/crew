@@ -17,6 +17,7 @@ SKILLS = [
     "skills.custom_vc",
     "skills.video_crew",
     "skills.spam_clear",
+    "skills.crew_perks",
 ]
 
 
