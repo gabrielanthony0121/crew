@@ -50,8 +50,7 @@ MOD_ANNOUNCEMENTS_CHANNEL_ID: int = 1508675774943723593
 # Crew Booster perks panel (#crew-perks)
 CREW_PERKS_CHANNEL_ID: int = 1521962377904525464
 CREW_BOOSTER_ROLE_ID: int = 1503545672207438004
-# Booster panel images — upload to Discord, copy link, paste here or set via Railway env vars.
-# Banner: "LANGUAGE CREW BOOSTER" art (wide image at the bottom of the embed).
-# Thumbnail: optional small logo; falls back to the server icon if unset.
+# Booster panel image — upload to Discord, copy link, set via Railway env var.
+# Used as a small thumbnail (top-right). CREW_PERKS_BANNER_URL is a legacy fallback.
 CREW_PERKS_THUMBNAIL_URL: str | None = os.getenv("CREW_PERKS_THUMBNAIL_URL")
 CREW_PERKS_BANNER_URL: str | None = os.getenv("CREW_PERKS_BANNER_URL")
