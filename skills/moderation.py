@@ -1,6 +1,14 @@
 import discord
 from discord.ext import commands
 
+from core.mute_helpers import (
+    UnmanageableRolesError,
+    VoiceDisconnectError,
+    apply_mute,
+    get_or_create_muted_role,
+    remove_mute,
+)
+from core.muted_roles_db import init_muted_roles_db
 from core.warnings_db import add_warning, get_user_warnings, init_warnings_db
 
 
@@ -13,6 +21,7 @@ class Moderation(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         init_warnings_db()
+        init_muted_roles_db()
 
     def has_permission(self, author: discord.Member) -> bool:
         return (
@@ -89,30 +98,21 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
+        muted_role = await get_or_create_muted_role(ctx.guild)
         if muted_role is None:
-            try:
-                muted_role = await ctx.guild.create_role(
-                    name="Muted",
-                    color=discord.Color.from_rgb(128, 128, 128),
-                    reason="Auto-created by bot",
-                )
-                for channel in ctx.guild.channels:
-                    await channel.set_permissions(
-                        muted_role,
-                        send_messages=False,
-                        speak=False,
-                        add_reactions=False,
-                    )
-            except discord.Forbidden:
-                embed = discord.Embed(
-                    description="❌ I don't have permission to create the `Muted` role.",
-                    color=discord.Color.red(),
-                )
-                await ctx.send(embed=embed, delete_after=8)
-                return
+            embed = discord.Embed(
+                description="❌ I don't have permission to create the `Muted` role.",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
 
-        if muted_role in member.roles:
+        extra_roles = [
+            role
+            for role in member.roles
+            if role != ctx.guild.default_role and role != muted_role
+        ]
+        if muted_role in member.roles and not extra_roles:
             embed = discord.Embed(
                 description=f"⚠️ {member.mention} is already muted.",
                 color=discord.Color.orange(),
@@ -121,13 +121,44 @@ class Moderation(commands.Cog):
             return
 
         try:
-            await member.add_roles(muted_role, reason=reason)
+            await apply_mute(member, muted_role, reason)
+        except VoiceDisconnectError:
+            embed = discord.Embed(
+                description=(
+                    "❌ I could not disconnect this member from voice. "
+                    "Give me **Move Members** in that voice channel."
+                ),
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=10)
+            return
+        except UnmanageableRolesError as exc:
+            embed = discord.Embed(
+                description=(
+                    "❌ I cannot remove this member's roles because some are above my role: "
+                    f"**{exc.role_names}**. Move my bot role higher in the server settings."
+                ),
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=10)
+            return
         except discord.Forbidden:
             embed = discord.Embed(
-                description="❌ I don't have permission to mute this member.",
+                description=(
+                    "❌ I don't have permission to mute this member. "
+                    "Make sure my role is above theirs and I have **Manage Roles**."
+                ),
                 color=discord.Color.red(),
             )
             await ctx.send(embed=embed, delete_after=8)
+            return
+        except Exception as exc:
+            print(f"[ERROR] Mute failed for {user_id}: {exc}")
+            embed = discord.Embed(
+                description=f"❌ Mute failed: `{exc}`",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=10)
             return
 
         try:
@@ -135,16 +166,26 @@ class Moderation(commands.Cog):
         except Exception:
             pass
 
+        member = await ctx.guild.fetch_member(user_id)
         embed = discord.Embed(title="🔇 Member Muted", color=discord.Color.from_rgb(255, 165, 0))
         embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
         embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
         embed.add_field(name="📋 Reason", value=reason, inline=False)
+        current_roles = [
+            role.name for role in member.roles
+            if role != ctx.guild.default_role
+        ]
+        embed.add_field(
+            name="Current Roles",
+            value=", ".join(current_roles) if current_roles else "Muted only",
+            inline=False,
+        )
         embed.set_footer(
             text=f"Action logged • Server: {ctx.guild.name}",
             icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
         )
         await ctx.send(embed=embed)
-        print(f"[LOG] Mute | {member} ({member.id}) | Reason: {reason} | By: {ctx.author}")
+        print(f"[LOG] Mute | {member} ({member.id}) | Roles: {current_roles} | Reason: {reason} | By: {ctx.author}")
 
         # Also send to configured log channel
         log_embed = discord.Embed(title="🔇 Member Muted", color=discord.Color.from_rgb(255, 165, 0), timestamp=discord.utils.utcnow())
@@ -187,7 +228,18 @@ class Moderation(commands.Cog):
             await ctx.send(embed=embed, delete_after=8)
             return
 
-        await member.remove_roles(muted_role)
+        try:
+            await remove_mute(member, muted_role, reason="Unmuted via c!unmute")
+        except discord.Forbidden:
+            embed = discord.Embed(
+                description=(
+                    "❌ I don't have permission to unmute this member. "
+                    "Make sure my role is above theirs and I have **Manage Roles**."
+                ),
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
 
         try:
             await ctx.message.delete()

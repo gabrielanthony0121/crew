@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from datetime import timedelta
 
+from core.mute_helpers import apply_mute, get_or_create_muted_role
+
 # Channel restriction - same as other mod commands
 MOD_COMMANDS_CHANNEL_ID = 1508675820967690311
 
@@ -110,36 +112,18 @@ class SpamClear(commands.Cog):
                 channels_affected += 1
                 total_deleted += channel_deleted
 
-        # Apply mute (same logic as other mod commands, duplicated to keep files independent)
         mute_success = False
         mute_reason = "Spam / mass messaging (via c!spam command)"
-        muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
-        if muted_role is None:
-            try:
-                muted_role = await ctx.guild.create_role(
-                    name="Muted",
-                    color=discord.Color.from_rgb(128, 128, 128),
-                    reason="Auto-created by bot",
-                )
-                for channel in ctx.guild.channels:
-                    await channel.set_permissions(
-                        muted_role,
-                        send_messages=False,
-                        speak=False,
-                        add_reactions=False,
-                    )
-            except discord.Forbidden:
-                muted_role = None
+        muted_role = await get_or_create_muted_role(ctx.guild)
 
         if muted_role is not None:
             try:
-                # Ensure we have a Member object for roles
                 if not isinstance(target, discord.Member):
                     target = await ctx.guild.fetch_member(user_id)
                 if muted_role in target.roles:
                     mute_success = True
                 else:
-                    await target.add_roles(muted_role, reason=mute_reason)
+                    await apply_mute(target, muted_role, mute_reason)
                     mute_success = True
             except discord.Forbidden:
                 mute_success = False
