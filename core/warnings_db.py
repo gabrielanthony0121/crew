@@ -207,3 +207,31 @@ def get_user_warnings(guild_id: int, user_id: int) -> list[dict]:
     warnings_list = _format_rows(rows)
     print(f"[DEBUG] Review query | Guild={guild_id} | User={user_id} | Found={len(warnings_list)} warns")
     return warnings_list
+
+
+def clear_user_warnings(guild_id: int, user_id: int) -> int:
+    """Delete all warnings for a member. Returns how many were removed."""
+    if using_postgres():
+        import psycopg2
+
+        with psycopg2.connect(_normalize_database_url(DATABASE_URL)) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM warnings WHERE guild_id = %s AND user_id = %s",
+                    (guild_id, user_id),
+                )
+                deleted = cur.rowcount
+            conn.commit()
+    else:
+        conn = sqlite3.connect(WARNINGS_DB)
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM warnings WHERE guild_id = ? AND user_id = ?",
+            (guild_id, user_id),
+        )
+        deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+
+    print(f"[LOG] Warnings cleared | Guild={guild_id} | User={user_id} | Removed={deleted}")
+    return deleted

@@ -63,6 +63,16 @@ async def get_mod_guide_embed() -> discord.Embed:
     )
 
     embed.add_field(
+        name="🧹 c!clearwarn",
+        value=(
+            "**Usage:** `c!clearwarn <user_id> [reason]`\n"
+            "**Description:** Clears all warnings from a member's record.\n"
+            "**Example:** `c!clearwarn 123456789012345678 Improved behavior`"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
         name="🚫 c!spam",
         value=(
             "**Usage:** `c!spam <user_id>`\n"

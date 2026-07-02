@@ -9,7 +9,7 @@ from core.mute_helpers import (
     remove_mute,
 )
 from core.muted_roles_db import init_muted_roles_db
-from core.warnings_db import add_warning, get_user_warnings, init_warnings_db
+from core.warnings_db import add_warning, clear_user_warnings, get_user_warnings, init_warnings_db
 
 
 # ID do canal exclusivo de comandos de moderação (fornecido pelo usuário)
@@ -636,6 +636,103 @@ class Moderation(commands.Cog):
             icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
         )
         await ctx.send(embed=embed)
+
+    @commands.command(name="clearwarn")
+    async def clearwarn(
+        self,
+        ctx: commands.Context,
+        user_id: int = None,
+        *,
+        reason: str = "No reason provided",
+    ):
+        """Clear all warnings from a member's record."""
+        if not self.has_permission(ctx.author):
+            embed = discord.Embed(
+                description="❌ You don't have permission to use this command.",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        effective_id = self._get_mod_channel_id(ctx.channel)
+        if effective_id != MOD_COMMANDS_CHANNEL_ID:
+            embed = discord.Embed(
+                description=(
+                    "❌ This command can only be used in the `mod commands` channel.\n\n"
+                    f"**Channel ID the bot sees (effective):** `{effective_id}`\n"
+                    f"**Configured ID:** `{MOD_COMMANDS_CHANNEL_ID}`"
+                ),
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=15)
+            return
+
+        if user_id is None:
+            embed = discord.Embed(
+                description="❌ Correct usage: `c!clearwarn <id> [reason]`",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        member = await self.get_member(ctx, user_id)
+        if member is None:
+            return
+
+        if member.top_role >= ctx.author.top_role and not ctx.author.guild_permissions.administrator:
+            embed = discord.Embed(
+                description="❌ You cannot clear warnings for someone with an equal or higher role.",
+                color=discord.Color.red(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        previous_count = len(get_user_warnings(ctx.guild.id, member.id))
+        if previous_count == 0:
+            embed = discord.Embed(
+                title="✅ Clean Record",
+                description=f"{member.mention} has no warnings to clear.",
+                color=discord.Color.green(),
+            )
+            await ctx.send(embed=embed, delete_after=8)
+            return
+
+        removed = clear_user_warnings(ctx.guild.id, member.id)
+
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
+
+        embed = discord.Embed(title="🧹 Warnings Cleared", color=discord.Color.green())
+        embed.add_field(name="👤 User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        embed.add_field(name="🛡️ Moderator", value=ctx.author.mention, inline=True)
+        embed.add_field(name="📋 Warnings Removed", value=str(removed), inline=True)
+        embed.add_field(name="📋 Reason", value=reason.strip(), inline=False)
+        embed.set_footer(
+            text=f"Action logged • Server: {ctx.guild.name}",
+            icon_url=ctx.guild.icon.url if ctx.guild.icon else None,
+        )
+        await ctx.send(embed=embed)
+
+        print(
+            f"[LOG] Clearwarn | {member} ({member.id}) | Removed: {removed} "
+            f"| Reason: {reason} | By: {ctx.author}"
+        )
+
+        log_embed = discord.Embed(
+            title="🧹 Warnings Cleared",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow(),
+        )
+        log_embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        log_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        log_embed.add_field(name="Moderator", value=ctx.author.mention, inline=True)
+        log_embed.add_field(name="Warnings Removed", value=str(removed), inline=True)
+        log_embed.add_field(name="Reason", value=reason.strip(), inline=False)
+        log_embed.add_field(name="User ID", value=str(member.id), inline=True)
+        if hasattr(self.bot, "send_log"):
+            await self.bot.send_log(log_embed)
 
     @commands.command(name="sendmodguide")
     @commands.has_permissions(administrator=True)
